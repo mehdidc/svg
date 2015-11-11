@@ -3,14 +3,18 @@ import theano.tensor as T
 
 from lasagne import layers, init, nonlinearities
 
+from collections import defaultdict
 
-class SumLayer(layers.Layer):
-    def __init__(self, incoming, axis=-1, **kwargs):
-        super(SumLayer, self).__init__(incoming, **kwargs)
+class ReduceLayer(layers.Layer):
+    def __init__(self, incoming,
+                 reduce_function,
+                 axis=-1,
+                 **kwargs):
+        super(ReduceLayer, self).__init__(incoming, **kwargs)
         self.axis = axis
 
     def get_output_for(self, input, **kwargs):
-        return input.mean(axis=self.axis)
+        return self.reduce_function(input)
 
     def get_output_shape_for(self, input_shape):
         shape = (list(input_shape[0:self.axis]) +
@@ -18,6 +22,12 @@ class SumLayer(layers.Layer):
         shape = tuple(shape)
         return shape
 
+class SumLayer(ReduceLayer):
+
+    def __init__(self, incoming, axis=-1, **kwargs):
+        reduce_function = lambda x, axis: x.mean(axis=axis)
+        super(SumLayer, self).__init__(incoming, reduce_function , axis=axis,
+                                       **kwargs)
 
 class RealEmbeddingLayer(layers.Layer):
 
@@ -99,7 +109,14 @@ class RecurrentSimpleLayer(layers.Layer):
 
     def get_output_shape_for(self, input_shape):
         shape_one_step = self.decomposition_layer.get_output_shape_for(input_shape)
-        shape = [shape_one_step[0], self.n_steps] + list(shape_one_step[1:])
+
+        theano_stuff =  (isinstance(self.n_steps, T.TensorVariable) or
+                         isinstance(self.n_steps, T.sharedvar.SharedVariable))
+        if theano_stuff:
+            n_steps = None
+        else:
+            n_steps = self.n_steps
+        shape = [shape_one_step[0], n_steps] + list(shape_one_step[1:])
         shape = tuple(shape)
         return shape
 
@@ -125,3 +142,13 @@ def recurrent_simple(X, decomposition_layer, n_steps,
                                   **scan_kwargs)
     result = result.dimshuffle(1, 0, 2)
     return result, updates
+
+
+def iterate_over_variable_size_minibatches(X, axis=0, nb_epochs=1):
+    per_size = defaultdict(list)
+    for x in X:
+        per_size[x.shape[axis]].append(x)
+    print(per_size.keys())
+    for i in range(nb_epochs):
+        for size, content in per_size.items():
+            yield content

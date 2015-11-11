@@ -4,7 +4,8 @@ import theano.tensor as T
 
 from lasagne import layers, init, nonlinearities
 
-from helpers import RealEmbeddingLayer, RecurrentAccumulationLayer, SumLayer, RecurrentSimpleLayer
+from helpers import RealEmbeddingLayer, RecurrentAccumulationLayer
+from helpers import SumLayer, RecurrentSimpleLayer, ReduceLayer
 
 
 def build_model(batch_size=None, nb_items=5,
@@ -70,11 +71,10 @@ def build_model_seq_to_seq(batch_size=None, nb_items=5,
                            size_items=8,
                            size_hidden=100,
                            size_latent=100):
-    l_input = layers.InputLayer((batch_size, nb_items, size_items),
+    l_input = layers.InputLayer((batch_size, None, size_items),
                                  name="input")
     l_hidden = layers.LSTMLayer(l_input, num_units=size_hidden, name="hidden")
     l_hidden_sliced = layers.SliceLayer(l_hidden, indices=-1, axis=1, name="hidden_sliced")
-
     l_latent_reconstruction_mean = layers.DenseLayer(l_hidden_sliced,
                                                      num_units=size_latent,
                                                      nonlinearity=nonlinearities.linear,
@@ -106,13 +106,13 @@ def build_model_seq_to_seq(batch_size=None, nb_items=5,
                                               num_units=size_items * 2,
                                               nonlinearity=nonlinearities.linear,
                                               name="input_rec")
-
     l_input_reconstruction_mean = layers.SliceLayer(l_input_reconstruction,
                                                     indices=slice(0, size_items),
                                                     axis=2,
                                                     name="input_rec_mean")
     l_input_reconstruction_std = layers.SliceLayer(l_input_reconstruction,
                                                    indices=slice(size_items, -1),
+                                                   axis=2,
                                                    name="input_rec_std")
 
     layers_latent_to_input = [
