@@ -89,13 +89,18 @@ def build_model(batch_size=None, nb_items=5,
     l_Z = RealEmbeddingLayer(l_input, size_items, size_embedding,
                              name="emb")
     l_Z_sum = SumLayer(l_Z, axis=1, name="emb_sum")
-    l_latent_reconstruction = layers.DenseLayer(l_Z_sum, num_units=size_latent,
-                                                name="latent_rec")
+    l_latent_reconstruction_mean = layers.DenseLayer(l_Z_sum,
+                                                     num_units=size_latent,
+                                                     name="latent_rec_mean")
+    l_latent_reconstruction_log_sigma = layers.DenseLayer(l_Z_sum,
+                                                          num_units=size_latent,
+                                                          name="latent_rec_std")
     layers_input_to_latent = [
         l_input,
         l_Z,
         l_Z_sum,
-        l_latent_reconstruction
+        l_latent_reconstruction_mean,
+        l_latent_reconstruction_log_sigma
     ]
 
     # Latent to Input
@@ -104,7 +109,7 @@ def build_model(batch_size=None, nb_items=5,
 
     l_Z_sum = layers.DenseLayer(l_latent, num_units=size_embedding)
     decomposition_layer_input = layers.InputLayer((batch_size, size_embedding),
-                                                   name="decomposition_innput")
+                                                  name="decomposition_innput")
     decompositon_layer = layers.DenseLayer(decomposition_layer_input,
                                            num_units=size_embedding,
                                            name="decomposition")
@@ -115,12 +120,18 @@ def build_model(batch_size=None, nb_items=5,
     l_input_reconstruction = RealEmbeddingLayer(l_acc, size_embedding,
                                                 size_items, W=l_Z.W.T,
                                                 name="input_rec")
+    l_input_reconstruction_log_sigma = RealEmbeddingLayer(l_acc, size_embedding,
+                                                          size_items,
+                                                          name="input_rec")
+
     layers_latent_to_input = [
         l_latent,
         l_acc,
-        l_input_reconstruction
+        l_input_reconstruction,
+        l_input_reconstruction_log_sigma
     ]
     return layers_input_to_latent, layers_latent_to_input
+
 if __name__ == "__main__":
     import numpy as np
     np.random.seed(1234)
