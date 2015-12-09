@@ -42,7 +42,7 @@ def relative_position(bezier_values):
 
 
 def absolute_position(bezier_values):
-    return bezier_values.cumsum()
+    return bezier_values.cumsum(axis=0)
 
 
 def preprocessed_bezier(o):

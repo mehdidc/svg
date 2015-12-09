@@ -33,8 +33,6 @@ def train_supervised():
 
     y = read_bezier_dataset(filenames)
     y = map(relative_position, y)
-    print(y)
-    sys.exit(0)
 
     nb_items = theano.shared(0)
 
@@ -81,6 +79,7 @@ def train_supervised():
     nb_items.set_value(len(y[0]))
     capsule.fit(X=X[0:1], y=y[0:1])
     y_ = capsule.predict(X[0:1])
+    y_ = map(absolute_position, y_)
     svg_content = gen_svg_from_output(y_[0])
     with open("out.svg", "w") as fd:
         fd.write(svg_content)
