@@ -1,14 +1,29 @@
 import pandas as pd
 import numpy as np
+import os
+from skimage.io import imread
+from skimage.transform import resize
 
 
 def read_bezier_dataset(filenames):
-    X = []
-    for filename in filenames:
-        x = read_from_bezier_file(filename)
-        x = preprocessed_bezier(x)
-        X.append(x)
+    X = map(read_from_bezier_file, filenames)
+    X = map(preprocessed_bezier, X)
     return X
+
+
+def read_images(filenames, img_folder="png", ext="png"):
+    names = map(raw_name, filenames)
+    names =  [os.path.join(img_folder, name) + "." + ext
+              for name in names]
+    return map(imread, names)
+
+
+def resize_images(images, size):
+    return [resize(image, size).tolist() for image in images]
+
+
+def raw_name(filename):
+    return os.path.basename(filename.split(".")[0])
 
 
 def read_from_bezier_file(filename):
@@ -18,6 +33,16 @@ def read_from_bezier_file(filename):
                        sep=' ',
                        names=names)
     return df.values
+
+
+def relative_position(bezier_values):
+    z = np.zeros((1, 8))
+    bezier_values_ = np.concatenate((z, bezier_values), axis=0)
+    return bezier_values_[1:] - bezier_values_[0:-1]
+
+
+def absolute_position(bezier_values):
+    return bezier_values.cumsum()
 
 
 def preprocessed_bezier(o):
@@ -37,4 +62,4 @@ if __name__ == "__main__":
     import glob
     filenames = glob.glob("svg/*.txt")
     x = read_bezier_dataset(filenames)
-    print(x[1])
+    img = read_images(filenames)

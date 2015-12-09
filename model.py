@@ -126,12 +126,61 @@ def build_model_seq_to_seq(batch_size=None, nb_items=5,
 
     return layers_input_to_latent, layers_latent_to_input
 
+
+def build_model_img_to_seq(batch_size=None,
+                           img_shape=None,
+                           nb_items=5,
+                           nb_colors=1,
+                           size_items=8,
+                           kind="mlp",
+                           size_hidden=400):
+    assert (img_shape is not None) and (len(img_shape) == 2)
+    input_shape = (batch_size, nb_colors,
+                   img_shape[0], img_shape[1])
+    l_input = layers.InputLayer(input_shape, name="input")
+
+    if kind == "conv":
+        l_conv1_1 = layers.Conv2DLayer(l_input, num_filters=32, filter_size=(3, 3),
+                                    pad=1, name="conv1_1")
+        l_conv2_1 = layers.Conv2DLayer(l_conv1_1, num_filters=32,
+                                    filter_size=(3, 3),
+                                    pad=1, name="conv2_1")
+        l_pool1 = layers.MaxPool2DLayer(l_conv2_1, pool_size=(2, 2), name="pool1")
+        l_conv1_2 = layers.Conv2DLayer(l_pool1, num_filters=64, filter_size=(3, 3),
+                                    pad=1, name="conv1_2")
+        l_conv2_2 = layers.Conv2DLayer(l_conv1_2, num_filters=64,
+                                    filter_size=(3, 3),
+                                    pad=1,
+                                    name="conv2_2")
+        l_conv3_2 = layers.Conv2DLayer(l_conv2_2, num_filters=64,
+                                    filter_size=(3, 3),
+                                    pad=1, name="conv3_2")
+        l_pool2 = layers.MaxPool2DLayer(l_conv3_2, pool_size=(2, 2),
+                                        name="pool2")
+        l_hidden = layers.DenseLayer(l_pool2, size_hidden)
+    elif kind == "mlp":
+        l_hidden = layers.DenseLayer(l_input, num_units=size_hidden)
+    decomposition_layer = layers.InputLayer(l_hidden.output_shape)
+    l_recurrent = RecurrentSimpleLayer(
+        l_hidden,
+        decomposition_layer, n_steps=nb_items,
+        name="recurrent"
+    )
+    l_recurrent = layers.LSTMLayer(l_recurrent, num_units=512)
+    l_output = layers.LSTMLayer(l_recurrent,
+                                num_units=size_items,
+                                nonlinearity=nonlinearities.linear,
+                                name="output")
+    return l_input, l_output
+
 if __name__ == "__main__":
     import numpy as np
     np.random.seed(1234)
 
-    #input_to_latent, latent_to_input = build_model()
-    input_to_latent, latent_to_input = build_model_seq_to_seq()
+    # unsupervised
+    print("Unsupervised")
+    # input_to_latent, latent_to_input = build_model(size_latent=100)
+    input_to_latent, latent_to_input = build_model_seq_to_seq(size_latent=100)
 
     input = input_to_latent[0]
     latent_rec = input_to_latent[-1]
@@ -146,3 +195,12 @@ if __name__ == "__main__":
     H = np.random.uniform(size=(10, 100)).astype(np.float32)
     f = theano.function([latent.input_var], layers.get_output(input_rec))
     print(f(H).shape)
+
+    # supervised
+    print("Supervised")
+    input_img, output_seq = build_model_img_to_seq(img_shape=(32, 32))
+
+    X = np.random.uniform(size=(10, 1, 32, 32)).astype(np.float32)
+    f = theano.function([input_img.input_var],
+                        layers.get_output(output_seq))
+    print(f(X).shape)

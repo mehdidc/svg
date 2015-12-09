@@ -3,7 +3,91 @@ from invoke import task
 
 
 @task
-def train():
+def train_supervised():
+    from lasagne import updates
+    from lasagnekit.nnet.capsule import Capsule
+    from lasagnekit.easy import BatchOptimizer, InputOutputMapping
+    from data import read_bezier_dataset, read_images, resize_images
+    from data import absolute_position, relative_position
+    from model import build_model_img_to_seq
+    from svg import gen_svg_from_output
+
+    import theano.tensor as T
+    import theano
+    from lasagne import layers
+    import numpy as np
+    from helpers import iterate_over_variable_size_minibatches
+
+    from collections import OrderedDict
+    state = 1234
+    np.random.seed(state)
+
+    # data
+    img_shape = (32, 32)
+    filenames = glob.glob("svg/*.txt")
+    X = read_images(filenames)
+    X = resize_images(X, img_shape)
+    X = np.array(X).astype(np.float32)
+    X = X[:, None, :, :]  # 1color channel
+    X = 1 - X
+
+    y = read_bezier_dataset(filenames)
+    y = map(relative_position, y)
+    print(y)
+    sys.exit(0)
+
+    nb_items = theano.shared(0)
+
+    # model
+    input_image, output_seq = build_model_img_to_seq(nb_items=nb_items,
+                                                     kind="conv",
+                                                     img_shape=img_shape)
+    model = InputOutputMapping(
+        [input_image],
+        [output_seq]
+    )
+    # optimizer
+    learning_rate = 0.0001
+    batch_optimizer = BatchOptimizer(
+        whole_dataset_in_device=False,
+        batch_size=20,
+        max_nb_epochs=1000,
+        verbose=1,
+        optimization_procedure=(updates.adam,
+                                {"learning_rate": learning_rate}),
+    )
+    # Putting everything together
+
+    def loss_function(model, tensors):
+        X_batch, y_batch = tensors["X"], tensors["y"]
+        y_pred, = model.get_output(X_batch)
+        return ((y_pred - y_batch) ** 2).sum(axis=1).mean()
+
+    input_variables = OrderedDict()
+    input_variables["X"] = dict(tensor_type=T.tensor4)
+    input_variables["y"] = dict(tensor_type=T.tensor3)
+
+    def predict(model, X):
+        y_pred, = model.get_output(X)
+        return y_pred
+    functions = dict(
+        predict=dict(get_output=predict, params=["X"])
+    )
+
+    capsule = Capsule(input_variables, model,
+                      loss_function,
+                      functions=functions,
+                      batch_optimizer=batch_optimizer)
+    nb_items.set_value(len(y[0]))
+    capsule.fit(X=X[0:1], y=y[0:1])
+    y_ = capsule.predict(X[0:1])
+    svg_content = gen_svg_from_output(y_[0])
+    with open("out.svg", "w") as fd:
+        fd.write(svg_content)
+
+
+@task
+def train_unsupervised():
     from lasagne import updates
     from lasagnekit.generative.va import VariationalAutoencoder, Real
     from lasagnekit.generative.autoencoder import Autoencoder
