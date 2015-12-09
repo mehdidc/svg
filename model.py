@@ -69,8 +69,8 @@ def build_model(batch_size=None, nb_items=5,
 
 def build_model_seq_to_seq(batch_size=None, nb_items=5,
                            size_items=8,
-                           size_hidden=100,
-                           size_latent=100):
+                           size_hidden=400,
+                           size_latent=400):
     l_input = layers.InputLayer((batch_size, None, size_items),
                                  name="input")
     l_hidden = layers.LSTMLayer(l_input, num_units=size_hidden, name="hidden")

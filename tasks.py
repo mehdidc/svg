@@ -49,10 +49,10 @@ def train():
     )
 
     # optimizer
-    learning_rate = 0.01
+    learning_rate = 0.001
     batch_optimizer = BatchOptimizer(
         whole_dataset_in_device=False,
-        batch_size=1,
+        batch_size=20,
         max_nb_epochs=1,
         verbose=1,
         optimization_procedure=(updates.rmsprop,
@@ -73,10 +73,27 @@ def train():
                      X_type=T.tensor3)
     # training
     #vae.fit(X[0:1])
-    for x in iterate_over_variable_size_minibatches(X, axis=0, nb_epochs=10):
+    import os
+    epoch = 0
+    for x in iterate_over_variable_size_minibatches(X, axis=0, nb_epochs=10000):
         x = np.array(x)
         nb_items.set_value(x.shape[1])
         aa.fit(x)
+        if epoch % 100 == 0:
+            h, = aa.encode(x)
+            samples, = aa.decode(h)
+            try:
+                os.mkdir("epoch{}".format(epoch))
+            except OSError:
+                pass
+            for s_i, s in enumerate(samples):
+                svg_content = gen_svg_from_output(s)
+                filename = "epoch{}/{}".format(epoch, s_i)
+                with open("{}.svg".format(filename), "w") as fd:
+                    fd.write(svg_content)
+        epoch += 1
+
+
     # sampling
     #samples = vae.sample(nb=1)
     h,=aa.encode(X[0:1])
@@ -84,3 +101,6 @@ def train():
     svg_content = gen_svg_from_output(samples[0])
     with open("out.svg", "w") as fd:
         fd.write(svg_content)
+
+if __name__ == "__main__":
+    train()

@@ -148,7 +148,6 @@ def iterate_over_variable_size_minibatches(X, axis=0, nb_epochs=1):
     per_size = defaultdict(list)
     for x in X:
         per_size[x.shape[axis]].append(x)
-    print(per_size.keys())
     for i in range(nb_epochs):
         for size, content in per_size.items():
             yield content
