@@ -5,22 +5,25 @@ from lasagne import layers, init, nonlinearities
 
 from collections import defaultdict
 
+
 class ReduceLayer(layers.Layer):
     def __init__(self, incoming,
                  reduce_function,
                  axis=-1,
                  **kwargs):
         super(ReduceLayer, self).__init__(incoming, **kwargs)
+        self.reduce_function = reduce_function
         self.axis = axis
 
     def get_output_for(self, input, **kwargs):
-        return self.reduce_function(input)
+        return self.reduce_function(input, self.axis)
 
     def get_output_shape_for(self, input_shape):
         shape = (list(input_shape[0:self.axis]) +
                  list(input_shape[self.axis + 1:]))
         shape = tuple(shape)
         return shape
+
 
 class SumLayer(ReduceLayer):
 

@@ -3,6 +3,7 @@ import numpy as np
 import os
 from skimage.io import imread
 from skimage.transform import resize
+import theano
 
 
 def read_bezier_dataset(filenames):
@@ -13,8 +14,8 @@ def read_bezier_dataset(filenames):
 
 def read_images(filenames, img_folder="png", ext="png"):
     names = map(raw_name, filenames)
-    names =  [os.path.join(img_folder, name) + "." + ext
-              for name in names]
+    names = [os.path.join(img_folder, name) + "." + ext
+             for name in names]
     return map(imread, names)
 
 
@@ -36,7 +37,7 @@ def read_from_bezier_file(filename):
 
 
 def relative_position(bezier_values):
-    z = np.zeros((1, 8))
+    z = np.zeros((1, 8), dtype=theano.config.floatX)
     bezier_values_ = np.concatenate((z, bezier_values), axis=0)
     return bezier_values_[1:] - bezier_values_[0:-1]
 

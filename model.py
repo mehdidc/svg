@@ -1,11 +1,12 @@
 
 import theano
-import theano.tensor as T
 
-from lasagne import layers, init, nonlinearities
+from lasagne import layers, nonlinearities
 
 from helpers import RealEmbeddingLayer, RecurrentAccumulationLayer
-from helpers import SumLayer, RecurrentSimpleLayer, ReduceLayer
+from helpers import SumLayer, RecurrentSimpleLayer
+
+import numpy as np
 
 
 def build_model(batch_size=None, nb_items=5,
@@ -18,14 +19,16 @@ def build_model(batch_size=None, nb_items=5,
     l_Z = RealEmbeddingLayer(l_input, size_items, size_embedding,
                              name="emb")
     l_Z_sum = SumLayer(l_Z, axis=1, name="emb_sum")
-    l_latent_reconstruction_mean = layers.DenseLayer(l_Z_sum,
-                                                     num_units=size_latent,
-                                                     nonlinearity=nonlinearities.linear,
-                                                     name="latent_rec_mean")
-    l_latent_reconstruction_log_sigma = layers.DenseLayer(l_Z_sum,
-                                                          num_units=size_latent,
-                                                          name="latent_rec_std",
-                                                          nonlinearity=nonlinearities.linear)
+    l_latent_reconstruction_mean = layers.DenseLayer(
+        l_Z_sum,
+        num_units=size_latent,
+        nonlinearity=nonlinearities.linear,
+        name="latent_rec_mean")
+    l_latent_reconstruction_log_sigma = layers.DenseLayer(
+        l_Z_sum,
+        num_units=size_latent,
+        name="latent_rec_std",
+        nonlinearity=nonlinearities.linear)
     layers_input_to_latent = [
         l_input,
         l_Z,
@@ -38,26 +41,34 @@ def build_model(batch_size=None, nb_items=5,
     l_latent = layers.InputLayer((batch_size, size_latent),
                                  name="latent")
 
-    l_Z_sum = layers.DenseLayer(l_latent, num_units=size_embedding, name="latent_sum")
-    decomposition_layer_input = layers.InputLayer((batch_size, size_embedding*2),
-                                                  name="decomposition_input")
-    decomposition_layer = layers.DenseLayer(decomposition_layer_input,
-                                           num_units=size_embedding,
-                                           nonlinearity=nonlinearities.tanh,
-                                           name="decomposition")
-    l_acc = RecurrentAccumulationLayer(l_Z_sum,
-                                       decomposition_layer,
-                                       n_steps=nb_items,
-                                       name="recurrent_decoder")
-    l_input_reconstruction = RealEmbeddingLayer(l_acc, size_embedding,
-                                                size_items, W=l_Z.W.T,
-                                                name="input_rec_pre_mean")
-    l_input_reconstruction = layers.NonlinearityLayer(l_input_reconstruction,
-                                                      nonlinearities.tanh,
-                                                      name="input_rec_mean")
-    l_input_reconstruction_log_sigma = RealEmbeddingLayer(l_acc, size_embedding,
-                                                          size_items,
-                                                          name="input_rec_std")
+    l_Z_sum = layers.DenseLayer(
+        l_latent,
+        num_units=size_embedding, name="latent_sum")
+    decomposition_layer_input = layers.InputLayer(
+        (batch_size, size_embedding*2),
+        name="decomposition_input")
+    decomposition_layer = layers.DenseLayer(
+        decomposition_layer_input,
+        num_units=size_embedding,
+        nonlinearity=nonlinearities.tanh,
+        name="decomposition")
+    l_acc = RecurrentAccumulationLayer(
+        l_Z_sum,
+        decomposition_layer,
+        n_steps=nb_items,
+        name="recurrent_decoder")
+    l_input_reconstruction = RealEmbeddingLayer(
+        l_acc, size_embedding,
+        size_items, W=l_Z.W.T,
+        name="input_rec_pre_mean")
+    l_input_reconstruction = layers.NonlinearityLayer(
+        l_input_reconstruction,
+        nonlinearities.tanh,
+        name="input_rec_mean")
+    l_input_reconstruction_log_sigma = RealEmbeddingLayer(
+        l_acc, size_embedding,
+        size_items,
+        name="input_rec_std")
 
     layers_latent_to_input = [
         l_latent,
@@ -66,6 +77,7 @@ def build_model(batch_size=None, nb_items=5,
         l_input_reconstruction_log_sigma
     ]
     return layers_input_to_latent, layers_latent_to_input
+
 
 def build_model_seq_to_seq(batch_size=None, nb_items=5,
                            size_items=8,
@@ -166,12 +178,35 @@ def build_model_img_to_seq(batch_size=None,
         decomposition_layer, n_steps=nb_items,
         name="recurrent"
     )
-    l_recurrent = layers.LSTMLayer(l_recurrent, num_units=512)
+    l_recurrent = layers.LSTMLayer(l_recurrent, num_units=1024)
     l_output = layers.LSTMLayer(l_recurrent,
                                 num_units=size_items,
                                 nonlinearity=nonlinearities.linear,
                                 name="output")
     return l_input, l_output
+
+
+def build_model_seq_to_img(batch_size=None,
+                           img_shape=None,
+                           nb_items=5,
+                           nb_colors=1,
+                           size_items=8,
+                           kind="mlp",
+                           size_hidden=400):
+    assert (img_shape is not None) and (len(img_shape) == 2)
+    input_shape = (batch_size, nb_items, size_items)
+    output_shape = tuple([batch_size, nb_colors] + list(img_shape))
+
+    l_input = layers.InputLayer(input_shape, name="input")
+
+    l_recurrent = layers.LSTMLayer(l_input, num_units=512)
+    l_recurrent = layers.LSTMLayer(l_recurrent,
+                                   num_units=np.prod(output_shape[1:]))
+    l_output = SumLayer(l_recurrent, axis=1)
+    l_output = layers.NonlinearityLayer(l_output, nonlinearities.sigmoid)
+    l_output = layers.ReshapeLayer(l_output, [[0]] + list(output_shape[1:]))
+    return l_input, l_output
+
 
 if __name__ == "__main__":
     import numpy as np
@@ -187,20 +222,28 @@ if __name__ == "__main__":
 
     X = np.random.uniform(size=(10, 5, 8)).astype(np.float32)
     f = theano.function([input.input_var], layers.get_output(latent_rec))
-    print(f(X).shape)
+    print(X.shape, f(X).shape)
 
     latent = latent_to_input[0]
     input_rec = latent_to_input[-1]
 
     H = np.random.uniform(size=(10, 100)).astype(np.float32)
     f = theano.function([latent.input_var], layers.get_output(input_rec))
-    print(f(H).shape)
+    print(H.shape, f(H).shape)
 
-    # supervised
+    # supervised (img_to_seq)
     print("Supervised")
     input_img, output_seq = build_model_img_to_seq(img_shape=(32, 32))
 
     X = np.random.uniform(size=(10, 1, 32, 32)).astype(np.float32)
     f = theano.function([input_img.input_var],
                         layers.get_output(output_seq))
-    print(f(X).shape)
+    print(X.shape, f(X).shape)
+
+    # supervised (seq_to_img)
+    print("Supervised seq_to_img")
+
+    input_seq, output_img = build_model_seq_to_img(img_shape=(32, 32))
+    X = np.random.uniform(size=(10, 5, 8)).astype(np.float32)
+    f = theano.function([input_seq.input_var], layers.get_output(output_img))
+    print(X.shape, f(X).shape)
