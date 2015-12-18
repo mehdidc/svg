@@ -58,7 +58,7 @@ def train_supervised_img_to_seq_(img, seq, img_shape):
     batch_optimizer = BatchOptimizer(
         whole_dataset_in_device=False,
         batch_size=20,
-        max_nb_epochs=10,
+        max_nb_epochs=1,
         verbose=1,
         optimization_procedure=(updates.adam,
                                 {"learning_rate": learning_rate}),
@@ -85,8 +85,9 @@ def train_supervised_img_to_seq_(img, seq, img_shape):
                       loss_function,
                       functions=functions,
                       batch_optimizer=batch_optimizer)
-    X, y = X[0:10], y[0:10]
-    for nb in range(10000):
+    #X, y = X[0:10], y[0:10]
+    X, y = X, y
+    for nb in range(100000):
         i = np.random.choice(range(len(y)))
         capsule.fit(X=X[i: i + 1], y=y[i:i + 1])
         if nb % 10 == 0:

@@ -145,7 +145,7 @@ def build_model_img_to_seq(batch_size=None,
                            nb_colors=1,
                            size_items=8,
                            kind="mlp",
-                           size_hidden=400):
+                           size_hidden=200):
     assert (img_shape is not None) and (len(img_shape) == 2)
     input_shape = (batch_size, nb_colors,
                    img_shape[0], img_shape[1])
@@ -178,7 +178,8 @@ def build_model_img_to_seq(batch_size=None,
         decomposition_layer, n_steps=nb_items,
         name="recurrent"
     )
-    l_recurrent = layers.LSTMLayer(l_recurrent, num_units=1024)
+    l_recurrent = layers.LSTMLayer(l_recurrent, num_units=128)
+    l_recurrent = layers.LSTMLayer(l_recurrent, num_units=128)
     l_output = layers.LSTMLayer(l_recurrent,
                                 num_units=size_items,
                                 nonlinearity=nonlinearities.linear,
@@ -199,11 +200,13 @@ def build_model_seq_to_img(batch_size=None,
 
     l_input = layers.InputLayer(input_shape, name="input")
 
-    l_recurrent = layers.LSTMLayer(l_input, num_units=512)
-    l_recurrent = layers.LSTMLayer(l_recurrent,
-                                   num_units=np.prod(output_shape[1:]))
+    l_recurrent = layers.RecurrentLayer(l_input, num_units=128)
+    l_recurrent = layers.RecurrentLayer(l_recurrent, num_units=128)
+    l_recurrent = layers.RecurrentLayer(l_recurrent,
+                                   num_units=np.prod(output_shape[1:]),
+                                   nonlinearity=nonlinearities.linear)
     l_output = SumLayer(l_recurrent, axis=1)
-    l_output = layers.NonlinearityLayer(l_output, nonlinearities.sigmoid)
+    l_output = layers.NonlinearityLayer(l_output, nonlinearities.tanh)
     l_output = layers.ReshapeLayer(l_output, [[0]] + list(output_shape[1:]))
     return l_input, l_output
 
