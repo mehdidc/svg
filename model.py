@@ -1,10 +1,13 @@
-
 import theano
-
 from lasagne import layers, nonlinearities
+from helpers import (
+        RealEmbeddingLayer, RecurrentAccumulationLayer, CondGRULayer,
+        TensorDenseLayer)
+from helpers import SumLayer, RecurrentSimpleLayer, steep_sigmoid
+from lasagne.layers.recurrent import Gate
+from lasagne.init import Orthogonal
+from lasagne.nonlinearities import tanh, linear
 
-from helpers import RealEmbeddingLayer, RecurrentAccumulationLayer
-from helpers import SumLayer, RecurrentSimpleLayer
 
 import numpy as np
 
@@ -145,46 +148,53 @@ def build_model_img_to_seq(batch_size=None,
                            nb_colors=1,
                            size_items=8,
                            kind="mlp",
-                           size_hidden=200):
+                           n_out=8,
+                           size_hidden=500):
     assert (img_shape is not None) and (len(img_shape) == 2)
-    input_shape = (batch_size, nb_colors,
-                   img_shape[0], img_shape[1])
-    l_input = layers.InputLayer(input_shape, name="input")
+    input_img_shape = (batch_size, nb_colors,
+                       img_shape[0], img_shape[1])
+    input_seq_shape = (batch_size, nb_items, size_items)
 
+    l_img = layers.InputLayer(input_img_shape, name="img")
+    l_seq = layers.InputLayer(input_seq_shape, name="seq")
+    
+    l_input = l_img
     if kind == "conv":
         l_conv1_1 = layers.Conv2DLayer(l_input, num_filters=32, filter_size=(3, 3),
-                                    pad=1, name="conv1_1")
+                                       pad=1, name="conv1_1")
         l_conv2_1 = layers.Conv2DLayer(l_conv1_1, num_filters=32,
-                                    filter_size=(3, 3),
-                                    pad=1, name="conv2_1")
+                                       filter_size=(3, 3),
+                                       pad=1, name="conv2_1")
         l_pool1 = layers.MaxPool2DLayer(l_conv2_1, pool_size=(2, 2), name="pool1")
         l_conv1_2 = layers.Conv2DLayer(l_pool1, num_filters=64, filter_size=(3, 3),
-                                    pad=1, name="conv1_2")
+                                       pad=1, name="conv1_2")
         l_conv2_2 = layers.Conv2DLayer(l_conv1_2, num_filters=64,
-                                    filter_size=(3, 3),
-                                    pad=1,
-                                    name="conv2_2")
+                                       filter_size=(3, 3),
+                                       pad=1,
+                                       name="conv2_2")
         l_conv3_2 = layers.Conv2DLayer(l_conv2_2, num_filters=64,
-                                    filter_size=(3, 3),
-                                    pad=1, name="conv3_2")
+                                       filter_size=(3, 3),
+                                       pad=1, name="conv3_2")
         l_pool2 = layers.MaxPool2DLayer(l_conv3_2, pool_size=(2, 2),
                                         name="pool2")
-        l_hidden = layers.DenseLayer(l_pool2, size_hidden)
+        l_hidden = layers.DenseLayer(l_pool2, size_hidden, name="code")
     elif kind == "mlp":
-        l_hidden = layers.DenseLayer(l_input, num_units=size_hidden)
-    decomposition_layer = layers.InputLayer(l_hidden.output_shape)
-    l_recurrent = RecurrentSimpleLayer(
-        l_hidden,
-        decomposition_layer, n_steps=nb_items,
-        name="recurrent"
-    )
-    l_recurrent = layers.LSTMLayer(l_recurrent, num_units=128)
-    l_recurrent = layers.LSTMLayer(l_recurrent, num_units=128)
-    l_output = layers.LSTMLayer(l_recurrent,
-                                num_units=size_items,
-                                nonlinearity=nonlinearities.linear,
-                                name="output")
-    return l_input, l_output
+        l_hidden = l_input
+        for i in range(3):
+            l_hidden = layers.DenseLayer(l_hidden, num_units=size_hidden, name="code")
+    l_pre_output = CondGRULayer(
+        l_seq,
+        resetgate=Gate(W_cell=None, W_hid=Orthogonal(),
+                       nonlinearity=steep_sigmoid),
+        updategate=Gate(W_cell=None,
+                        W_hid=Orthogonal(), nonlinearity=steep_sigmoid),
+        hidden_update=Gate(W_cell=None,
+                           W_hid=Orthogonal(),
+                           nonlinearity=tanh),
+        num_units=n_out, bias=l_hidden,
+        name="pre_output")
+    l_output = TensorDenseLayer(l_pre_output, num_units=n_out, nonlinearity=linear, name="output")
+    return l_img, l_seq, l_hidden, l_output
 
 
 def build_model_seq_to_img(batch_size=None,
@@ -203,8 +213,8 @@ def build_model_seq_to_img(batch_size=None,
     l_recurrent = layers.RecurrentLayer(l_input, num_units=128)
     l_recurrent = layers.RecurrentLayer(l_recurrent, num_units=128)
     l_recurrent = layers.RecurrentLayer(l_recurrent,
-                                   num_units=np.prod(output_shape[1:]),
-                                   nonlinearity=nonlinearities.linear)
+                                        num_units=np.prod(output_shape[1:]),
+                                        nonlinearity=nonlinearities.linear)
     l_output = SumLayer(l_recurrent, axis=1)
     l_output = layers.NonlinearityLayer(l_output, nonlinearities.tanh)
     l_output = layers.ReshapeLayer(l_output, [[0]] + list(output_shape[1:]))
@@ -212,7 +222,6 @@ def build_model_seq_to_img(batch_size=None,
 
 
 if __name__ == "__main__":
-    import numpy as np
     np.random.seed(1234)
 
     # unsupervised
@@ -235,14 +244,16 @@ if __name__ == "__main__":
     print(H.shape, f(H).shape)
 
     # supervised (img_to_seq)
-    print("Supervised")
-    input_img, output_seq = build_model_img_to_seq(img_shape=(32, 32))
-
+    print("Supervised img_to_seq")
+    size_items = 8
+    input_img, input_seq, hid, output_seq = build_model_img_to_seq(img_shape=(32, 32),
+                                                                   nb_items=None,
+                                                                   size_items=size_items)
     X = np.random.uniform(size=(10, 1, 32, 32)).astype(np.float32)
-    f = theano.function([input_img.input_var],
+    X_seq = np.random.uniform(size=(10, 5, size_items)).astype(np.float32)
+    f = theano.function([input_img.input_var, input_seq.input_var],
                         layers.get_output(output_seq))
-    print(X.shape, f(X).shape)
-
+    print("Inputs shape : {}, {}, Output shape : {}".format(X.shape, X_seq.shape, f(X, X_seq).shape))
     # supervised (seq_to_img)
     print("Supervised seq_to_img")
 

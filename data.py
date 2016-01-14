@@ -61,6 +61,6 @@ def preprocessed_bezier(o):
 
 if __name__ == "__main__":
     import glob
-    filenames = glob.glob("svg/*.txt")
+    filenames = glob.glob("data/simple/svg/*.txt")
     x = read_bezier_dataset(filenames)
-    img = read_images(filenames)
+    img = read_images(filenames, img_folder="data/simple/png")
