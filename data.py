@@ -23,6 +23,9 @@ def resize_images(images, size):
     return [resize(image, size).tolist() for image in images]
 
 
+def grayscale(images):
+    return [np.array(image)[:, :, 0] if len(np.array(image).shape) == 3 else image for image in images]
+
 def raw_name(filename):
     return os.path.basename(filename.split(".")[0])
 
@@ -61,6 +64,7 @@ def preprocessed_bezier(o):
 
 if __name__ == "__main__":
     import glob
+    from svg import gen_svg_from_output
     filenames = glob.glob("data/simple/svg/*.txt")
     x = read_bezier_dataset(filenames)
     img = read_images(filenames, img_folder="data/simple/png")

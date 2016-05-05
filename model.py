@@ -4,7 +4,7 @@ from helpers import (
         RealEmbeddingLayer, RecurrentAccumulationLayer, CondGRULayer,
         TensorDenseLayer)
 from helpers import SumLayer, RecurrentSimpleLayer, steep_sigmoid
-from lasagne.layers.recurrent import Gate
+from lasagne.layers.recurrent import Gate, GRULayer
 from lasagne.init import Orthogonal
 from lasagne.nonlinearities import tanh, linear
 
@@ -191,9 +191,13 @@ def build_model_img_to_seq(batch_size=None,
         hidden_update=Gate(W_cell=None,
                            W_hid=Orthogonal(),
                            nonlinearity=tanh),
-        num_units=n_out, bias=l_hidden,
+        #grad_clipping=1,
+        num_units=size_hidden, bias=l_hidden,
         name="pre_output")
-    l_output = TensorDenseLayer(l_pre_output, num_units=n_out, nonlinearity=linear, name="output")
+    l_hid = l_pre_output
+    for i in range(2):
+        l_hid = GRULayer(l_hid, num_units=size_hidden)
+    l_output = TensorDenseLayer(l_hid, num_units=n_out, nonlinearity=linear, name="output")
     return l_img, l_seq, l_hidden, l_output
 
 

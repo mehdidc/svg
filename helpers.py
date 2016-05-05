@@ -604,7 +604,7 @@ def softmax(x, axis=1, backend=T):
 
 
 def steep_sigmoid(x):
-    return nonlinearities.sigmoid(x*3.75)
+    return nonlinearities.sigmoid(x)
 
 
 class TensorDenseLayer(Layer):
